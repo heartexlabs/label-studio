@@ -13,15 +13,29 @@ except:
 
 from django.db import models
 from django.conf import settings
+from django.core.files.storage import FileSystemStorage
 from rest_framework.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
 
+class CanOverwriteStorage(FileSystemStorage):
+
+    def _save(self, name, content):
+        if settings.OVERWRITE_UPLOAD_FILES:
+            self.delete(name)
+        return super(CanOverwriteStorage, self)._save(name, content)
+
+    def get_available_name(self, name, max_length=None):
+        if settings.OVERWRITE_UPLOAD_FILES:
+            return name
+        return super(CanOverwriteStorage, self).get_available_name(name, max_length)
+
+
 class FileUpload(models.Model):
     user = models.ForeignKey('users.User', related_name='file_uploads', on_delete=models.CASCADE)
     project = models.ForeignKey('projects.Project', related_name='file_uploads', on_delete=models.CASCADE)
-    file = models.FileField(upload_to=settings.UPLOAD_DIR)
+    file = models.FileField(upload_to=settings.UPLOAD_DIR, storage=CanOverwriteStorage())
 
     @property
     def filepath(self):
@@ -46,6 +60,21 @@ class FileUpload(models.Model):
     def content(self):
         with io.open(self.filepath, encoding='utf-8') as f:
             return f.read()
+
+    @classmethod
+    def exists(cls, file):
+        filepath = os.path.join(settings.UPLOAD_DIR, file.name)
+        return cls.objects.filter(file=filepath).exists()
+
+    @classmethod
+    def get_by_filename(cls, filename):
+        filepath = os.path.join(settings.UPLOAD_DIR, filename)
+        result = cls.objects.filter(file=filepath)
+        if result.count() > 1:
+            logger.warning(
+                f'Found more then one file upload with path {filepath}. This may be due to several files uploaded with'
+                f' the same name. Set LABEL_STUDIO_OVERWRITE_UPLOAD_FILES=false to ensure upload names are unique')
+        return result.first()
 
     def read_tasks_list_from_csv(self, sep=','):
         logger.debug('Read tasks list from CSV file {}'.format(self.filepath))
@@ -137,6 +166,7 @@ class FileUpload(models.Model):
         file_uploads = FileUpload.objects.filter(project=project)
         if file_upload_ids:
             file_uploads = file_uploads.filter(id__in=file_upload_ids)
+
         for file_upload in file_uploads:
             file_format = file_upload.format
             if formats and file_format not in formats:
