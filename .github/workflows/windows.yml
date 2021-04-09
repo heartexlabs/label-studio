@@ -2,7 +2,7 @@ name: pytest:win
 
 on:
   push:
-    branches: ['*', '*/*', master]
+    branches: ['*', '*/*', '!ci/**', '!docs/**', master]
   paths:
     - 'label_studio/**'
 
