@@ -36,7 +36,7 @@ def start_fix():
     print('finished')
     print(colorama.Fore.LIGHTGREEN_EX + '\nPlease restart Label Studio to load the updated sqlite.dll\n')
     print(colorama.Fore.WHITE)
-    exit()
+    sys.exit()
 
 
 def windows_dll_fix():
